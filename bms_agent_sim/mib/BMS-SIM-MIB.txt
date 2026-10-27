@@ -1,0 +1,329 @@
+BMS-SIM-MIB DEFINITIONS ::= BEGIN
+
+-- Private MIB of the BMS agent.
+-- NOTE: 99999 is a placeholder enterprise number. Register your own
+-- Private Enterprise Number with IANA and replace it here and in
+-- src/core/bms_mib.h before deploying.
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE,
+    Integer32, Gauge32, enterprises
+        FROM SNMPv2-SMI
+    DisplayString
+        FROM SNMPv2-TC
+    MODULE-COMPLIANCE, OBJECT-GROUP, NOTIFICATION-GROUP
+        FROM SNMPv2-CONF;
+
+bmsAgent MODULE-IDENTITY
+    LAST-UPDATED "202610270000Z"
+    ORGANIZATION "Example"
+    CONTACT-INFO "admin@example.com"
+    DESCRIPTION  "Battery management system agent."
+    REVISION     "202610270000Z"
+    DESCRIPTION  "Initial version."
+    ::= { bmsEnterprise 1 }
+
+bmsEnterprise OBJECT IDENTIFIER ::= { enterprises 99999 }
+
+bmsNotifications OBJECT IDENTIFIER ::= { bmsAgent 0 }
+bmsSystem        OBJECT IDENTIFIER ::= { bmsAgent 1 }
+bmsStatus        OBJECT IDENTIFIER ::= { bmsAgent 2 }
+bmsConfig        OBJECT IDENTIFIER ::= { bmsAgent 5 }
+bmsConformance   OBJECT IDENTIFIER ::= { bmsAgent 6 }
+
+-- ------------------------------------------------------------ bmsSystem
+
+bmsModel OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Product model."
+    ::= { bmsSystem 1 }
+
+bmsFirmwareVersion OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Firmware version."
+    ::= { bmsSystem 2 }
+
+bmsCurrentTime OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Local time 'YYYY-MM-DD HH:MM:SS', empty while the clock is not set."
+    ::= { bmsSystem 3 }
+
+bmsNtpSynced OBJECT-TYPE
+    SYNTAX      INTEGER { true(1), false(2) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Whether the clock has been synchronized by NTP."
+    ::= { bmsSystem 4 }
+
+-- ------------------------------------------------------------ bmsStatus
+
+bmsPackVoltage OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "mV"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Pack voltage."
+    ::= { bmsStatus 1 }
+
+bmsPackCurrent OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "mA"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Pack current, positive while charging."
+    ::= { bmsStatus 2 }
+
+bmsSoc OBJECT-TYPE
+    SYNTAX      Integer32 (0..100)
+    UNITS       "%"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "State of charge."
+    ::= { bmsStatus 3 }
+
+bmsSoh OBJECT-TYPE
+    SYNTAX      Integer32 (0..100)
+    UNITS       "%"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "State of health."
+    ::= { bmsStatus 4 }
+
+bmsMaxCellVoltage OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "mV"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Highest cell voltage."
+    ::= { bmsStatus 5 }
+
+bmsMinCellVoltage OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "mV"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Lowest cell voltage."
+    ::= { bmsStatus 6 }
+
+bmsMaxTemperature OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.1 degC"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Highest cell temperature."
+    ::= { bmsStatus 7 }
+
+bmsPackState OBJECT-TYPE
+    SYNTAX      INTEGER { idle(1), charging(2), discharging(3), fault(4) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Pack operating state."
+    ::= { bmsStatus 8 }
+
+bmsActiveAlarms OBJECT-TYPE
+    SYNTAX      Gauge32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Number of rows in bmsAlarmTable."
+    ::= { bmsStatus 9 }
+
+bmsCommStatus OBJECT-TYPE
+    SYNTAX      INTEGER { ok(1), lost(2) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Communication with the BMS."
+    ::= { bmsStatus 10 }
+
+bmsCellCount OBJECT-TYPE
+    SYNTAX      Integer32 (1..32)
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Number of cells (rows in bmsCellTable)."
+    ::= { bmsStatus 11 }
+
+-- ------------------------------------------------------------ bmsCellTable
+
+bmsCellTable OBJECT-TYPE
+    SYNTAX      SEQUENCE OF BmsCellEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Per-cell measurements."
+    ::= { bmsAgent 3 }
+
+bmsCellEntry OBJECT-TYPE
+    SYNTAX      BmsCellEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "One cell."
+    INDEX       { bmsCellIndex }
+    ::= { bmsCellTable 1 }
+
+BmsCellEntry ::= SEQUENCE {
+    bmsCellIndex       Integer32,
+    bmsCellVoltage     Integer32,
+    bmsCellTemperature Integer32
+}
+
+bmsCellIndex OBJECT-TYPE
+    SYNTAX      Integer32 (1..32)
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Cell number, 1-based."
+    ::= { bmsCellEntry 1 }
+
+bmsCellVoltage OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "mV"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Cell voltage."
+    ::= { bmsCellEntry 2 }
+
+bmsCellTemperature OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.1 degC"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Cell temperature."
+    ::= { bmsCellEntry 3 }
+
+-- ------------------------------------------------------------ bmsAlarmTable
+
+bmsAlarmTable OBJECT-TYPE
+    SYNTAX      SEQUENCE OF BmsAlarmEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Active alarms, indexed by alarm code."
+    ::= { bmsAgent 4 }
+
+bmsAlarmEntry OBJECT-TYPE
+    SYNTAX      BmsAlarmEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "One active alarm."
+    INDEX       { bmsAlarmIndex }
+    ::= { bmsAlarmTable 1 }
+
+BmsAlarmEntry ::= SEQUENCE {
+    bmsAlarmIndex    INTEGER,
+    bmsAlarmSeverity INTEGER,
+    bmsAlarmText     DisplayString,
+    bmsAlarmTime     DisplayString
+}
+
+bmsAlarmIndex OBJECT-TYPE
+    SYNTAX      INTEGER { cellOverVoltage(1), cellUnderVoltage(2), tempHigh(3),
+                          socLow(4), commLost(5) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Alarm code. Readable (not not-accessible) because it is
+                 carried in the notifications."
+    ::= { bmsAlarmEntry 1 }
+
+bmsAlarmSeverity OBJECT-TYPE
+    SYNTAX      INTEGER { critical(1), major(2), minor(3) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Alarm severity."
+    ::= { bmsAlarmEntry 2 }
+
+bmsAlarmText OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Human readable description with the measured value."
+    ::= { bmsAlarmEntry 3 }
+
+bmsAlarmTime OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Local time the alarm was raised, empty if the clock was not set."
+    ::= { bmsAlarmEntry 4 }
+
+-- ------------------------------------------------------------ bmsConfig
+
+bmsCellOverVoltageThreshold OBJECT-TYPE
+    SYNTAX      Integer32 (2000..5000)
+    UNITS       "mV"
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "Cell over-voltage alarm threshold."
+    ::= { bmsConfig 1 }
+
+bmsCellUnderVoltageThreshold OBJECT-TYPE
+    SYNTAX      Integer32 (1500..4500)
+    UNITS       "mV"
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "Cell under-voltage alarm threshold."
+    ::= { bmsConfig 2 }
+
+bmsTempHighThreshold OBJECT-TYPE
+    SYNTAX      Integer32 (0..1200)
+    UNITS       "0.1 degC"
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "High temperature alarm threshold."
+    ::= { bmsConfig 3 }
+
+bmsSocLowThreshold OBJECT-TYPE
+    SYNTAX      Integer32 (0..100)
+    UNITS       "%"
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION "Low SOC alarm threshold."
+    ::= { bmsConfig 4 }
+
+-- ------------------------------------------------------------ notifications
+
+bmsAlarmRaised NOTIFICATION-TYPE
+    OBJECTS     { bmsAlarmIndex, bmsAlarmSeverity, bmsAlarmText }
+    STATUS      current
+    DESCRIPTION "An alarm was raised."
+    ::= { bmsNotifications 1 }
+
+bmsAlarmCleared NOTIFICATION-TYPE
+    OBJECTS     { bmsAlarmIndex, bmsAlarmSeverity, bmsAlarmText }
+    STATUS      current
+    DESCRIPTION "An alarm was cleared."
+    ::= { bmsNotifications 2 }
+
+-- ------------------------------------------------------------ conformance
+
+bmsGroups      OBJECT IDENTIFIER ::= { bmsConformance 1 }
+bmsCompliances OBJECT IDENTIFIER ::= { bmsConformance 2 }
+
+bmsObjectGroup OBJECT-GROUP
+    OBJECTS { bmsModel, bmsFirmwareVersion, bmsCurrentTime, bmsNtpSynced,
+              bmsPackVoltage, bmsPackCurrent, bmsSoc, bmsSoh,
+              bmsMaxCellVoltage, bmsMinCellVoltage, bmsMaxTemperature,
+              bmsPackState, bmsActiveAlarms, bmsCommStatus, bmsCellCount,
+              bmsCellVoltage, bmsCellTemperature,
+              bmsAlarmIndex, bmsAlarmSeverity, bmsAlarmText, bmsAlarmTime,
+              bmsCellOverVoltageThreshold, bmsCellUnderVoltageThreshold,
+              bmsTempHighThreshold, bmsSocLowThreshold }
+    STATUS  current
+    DESCRIPTION "All objects."
+    ::= { bmsGroups 1 }
+
+bmsNotificationGroup NOTIFICATION-GROUP
+    NOTIFICATIONS { bmsAlarmRaised, bmsAlarmCleared }
+    STATUS  current
+    DESCRIPTION "All notifications."
+    ::= { bmsGroups 2 }
+
+bmsCompliance MODULE-COMPLIANCE
+    STATUS  current
+    DESCRIPTION "Full implementation."
+    MODULE
+        MANDATORY-GROUPS { bmsObjectGroup, bmsNotificationGroup }
+    ::= { bmsCompliances 1 }
+
+END

@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BMS Agent</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--fg:#1d2733;--muted:#66727f;--line:#dde3e9;--accent:#1f6feb;--ok:#1a7f37;--warn:#b26b00;--bad:#c62828}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1418;--card:#182028;--fg:#e4e9ee;--muted:#93a1ae;--line:#2a3540;--accent:#4c8dff;--ok:#3fb950;--warn:#d29922;--bad:#f85149}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:16px;margin:0}
+header .sp{flex:1}
+#clock{color:var(--muted);font-variant-numeric:tabular-nums}
+nav{display:flex;gap:4px;padding:8px 16px;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line)}
+nav button{border:0;background:none;color:var(--muted);padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit;white-space:nowrap}
+nav button.on{background:var(--accent);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi .l{color:var(--muted);font-size:12px}.kpi .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.cell{border:1px solid var(--line);border-radius:8px;padding:8px;font-variant-numeric:tabular-nums}
+.cell .n{color:var(--muted);font-size:12px}.cell .mv{font-size:16px;font-weight:600}
+.cell.hi{border-color:var(--bad)}.cell.lo{border-color:var(--warn)}
+.bar{height:6px;background:var(--line);border-radius:3px;margin:4px 0;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.cell.hi .bar i{background:var(--bad)}.cell.lo .bar i{background:var(--warn)}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px}
+label{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12px}
+label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg);font-size:14px}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+input[type=checkbox]{width:auto}
+.actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+button.b{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:7px 14px;border-radius:6px;cursor:pointer}
+button.p{background:var(--accent);border-color:var(--accent);color:#fff}
+button.d{color:var(--bad);border-color:var(--bad)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500;font-size:12px}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff}
+.critical{background:var(--bad)}.major{background:var(--warn)}.minor{background:var(--muted)}.okc{background:var(--ok)}
+.muted{color:var(--muted)}
+.banner{padding:10px 12px;border-radius:8px;margin-bottom:16px;border:1px solid var(--warn);color:var(--warn)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;display:none;max-width:90vw}
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center}
+#login .card{width:min(340px,92vw)}
+#login form{grid-template-columns:1fr}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="card">
+    <h2>BMS Agent 로그인</h2>
+    <form id="loginForm">
+      <label>사용자<input name="user" value="admin" autocomplete="username"></label>
+      <label>비밀번호<input name="password" type="password" autocomplete="current-password"></label>
+      <div class="actions"><button class="b p">로그인</button></div>
+      <div class="muted">초기 계정: admin / admin</div>
+    </form>
+  </div>
+</div>
+
+<header>
+  <h1>BMS Agent</h1><span id="host" class="muted"></span>
+  <span class="sp"></span>
+  <span id="clock"></span>
+  <button class="b" id="logout">로그아웃</button>
+</header>
+<nav id="tabs">
+  <button data-t="dash" class="on">대시보드</button>
+  <button data-t="alarms">알람</button>
+  <button data-t="network">네트워크</button>
+  <button data-t="ntp">시간/NTP</button>
+  <button data-t="snmp">SNMP</button>
+  <button data-t="thresholds">알람 임계값</button>
+  <button data-t="system">시스템</button>
+  <button data-t="sim">시뮬레이터</button>
+</nav>
+
+<main>
+  <div id="netBanner" class="banner hidden"></div>
+
+  <section data-p="dash">
+    <div class="card"><h2>팩 상태</h2><div class="grid" id="kpis"></div></div>
+    <div class="card"><h2>셀 전압 / 온도</h2><div class="cells" id="cells"></div></div>
+  </section>
+
+  <section data-p="alarms" class="hidden">
+    <div class="card"><h2>활성 알람</h2><table><thead><tr><th>등급</th><th>내용</th><th>발생 시각</th></tr></thead><tbody id="activeAlarms"></tbody></table></div>
+    <div class="card"><h2>이력 (최근 50건)</h2><table><thead><tr><th>상태</th><th>등급</th><th>내용</th><th>시각</th></tr></thead><tbody id="alarmHistory"></tbody></table></div>
+  </section>
+
+  <section data-p="network" class="hidden">
+    <div class="card"><h2>현재 상태</h2><div class="grid" id="netStatus"></div></div>
+    <div class="card"><h2>IP 설정</h2>
+      <form id="netForm">
+        <label class="chk"><input type="checkbox" name="dhcp"> DHCP 사용</label>
+        <label>IP 주소<input name="ip" class="st"></label>
+        <label>서브넷 마스크<input name="mask" class="st"></label>
+        <label>게이트웨이<input name="gateway" class="st"></label>
+        <label>DNS<input name="dns"></label>
+        <label>호스트 이름<input name="hostname"></label>
+        <div class="actions"><button class="b p">적용</button><span class="muted">적용 후 제한 시간 안에 "확인"하지 않으면 이전 설정으로 자동 복구됩니다.</span></div>
+      </form>
+    </div>
+  </section>
+
+  <section data-p="ntp" class="hidden">
+    <div class="card"><h2>현재 시각</h2><div class="grid" id="timeStatus"></div>
+      <div class="actions" style="margin-top:12px">
+        <button class="b" id="syncNow">지금 NTP 동기화</button>
+        <button class="b" id="setPcTime">PC 시각으로 설정</button>
+      </div>
+    </div>
+    <div class="card"><h2>NTP 설정</h2>
+      <form id="ntpForm">
+        <label class="chk"><input type="checkbox" name="enable"> NTP 사용</label>
+        <label>NTP 서버 1<input name="server1"></label>
+        <label>NTP 서버 2<input name="server2"></label>
+        <label>동기화 주기 (분)<input name="interval_min" type="number" min="1" max="10080"></label>
+        <label>타임존<select name="tz_offset_min" id="tzSel"></select></label>
+        <div class="actions"><button class="b p">저장</button></div>
+      </form>
+    </div>
+  </section>
+
+  <section data-p="snmp" class="hidden">
+    <div class="card"><h2>SNMP 설정</h2>
+      <form id="snmpForm">
+        <label class="chk"><input type="checkbox" name="enable"> SNMP 에이전트 사용</label>
+        <label>UDP 포트<input name="port" type="number" min="1" max="65535"></label>
+        <label>읽기 커뮤니티 (RO)<input name="ro_community"></label>
+        <label>쓰기 커뮤니티 (RW)<input name="rw_community"></label>
+        <label>Trap 커뮤니티<input name="trap_community"></label>
+        <label>sysName<input name="sys_name"></label>
+        <label>sysContact<input name="sys_contact"></label>
+        <label>sysLocation<input name="sys_location"></label>
+        <label style="grid-column:1/-1">Trap 수신 서버 (한 줄에 하나, host:port, 최대 4개)<textarea name="trap_targets" rows="3" placeholder="192.168.1.10:162"></textarea></label>
+        <div class="actions"><button class="b p">저장</button></div>
+      </form>
+    </div>
+    <div class="card"><h2>통계</h2><div class="grid" id="snmpStats"></div></div>
+  </section>
+
+  <section data-p="thresholds" class="hidden">
+    <div class="card"><h2>알람 임계값</h2>
+      <form id="alarmForm">
+        <label>셀 과전압 (mV)<input name="cell_ov_mv" type="number"></label>
+        <label>셀 저전압 (mV)<input name="cell_uv_mv" type="number"></label>
+        <label>고온 (0.1 °C)<input name="temp_high_dc" type="number"></label>
+        <label>SOC 하한 (%)<input name="soc_low" type="number"></label>
+        <div class="actions"><button class="b p">저장</button></div>
+      </form>
+    </div>
+    <div class="card"><h2>BMS 통신</h2>
+      <form id="bmsForm">
+        <label>폴링 주기 (ms)<input name="poll_ms" type="number"></label>
+        <label>셀 개수<input name="cells" type="number" min="1" max="32"></label>
+        <div class="actions"><button class="b p">저장</button></div>
+      </form>
+    </div>
+  </section>
+
+  <section data-p="system" class="hidden">
+    <div class="card"><h2>비밀번호 변경</h2>
+      <form id="pwForm">
+        <label>현재 비밀번호<input name="old_password" type="password"></label>
+        <label>새 비밀번호 (6자 이상)<input name="new_password" type="password"></label>
+        <div class="actions"><button class="b p">변경</button></div>
+      </form>
+    </div>
+    <div class="card"><h2>설정 백업 / 복원</h2>
+      <div class="actions">
+        <button class="b" id="backup">백업 다운로드</button>
+        <label class="b" style="flex-direction:row;cursor:pointer">복원 파일 선택<input type="file" id="restore" accept=".json" class="hidden"></label>
+      </div>
+    </div>
+    <div class="card"><h2>시스템</h2>
+      <div class="grid" id="sysInfo"></div>
+      <div class="actions" style="margin-top:12px">
+        <button class="b" id="reboot">재시작</button>
+        <button class="b d" id="factory">공장 초기화</button>
+      </div>
+    </div>
+  </section>
+
+  <section data-p="sim" class="hidden">
+    <div class="card"><h2>시뮬레이터 (PC 전용)</h2>
+      <form id="simForm">
+        <label>동작 모드<select name="mode"><option value="auto">자동 (충방전 반복)</option><option value="charge">충전</option><option value="discharge">방전</option><option value="idle">대기</option></select></label>
+        <label>시뮬레이션 배속<input name="speed" type="number" min="1" max="3600"></label>
+        <label>SOC 강제 설정 (%)<input name="soc" type="number" min="0" max="100" step="0.1"></label>
+        <label class="chk"><input type="checkbox" name="comm_fail"> BMS 통신 끊김</label>
+        <div class="actions"><button class="b p">적용</button></div>
+      </form>
+    </div>
+    <div class="card"><h2>셀 고장 주입</h2>
+      <form id="faultForm">
+        <label>셀 번호<input name="cell" type="number" min="1" value="3"></label>
+        <label>전압 오프셋 (mV)<input name="mv_offset" type="number" value="400"></label>
+        <label>온도 오프셋 (0.1 °C)<input name="temp_offset_dc" type="number" value="0"></label>
+        <div class="actions"><button class="b p">주입</button><button class="b" type="button" id="resetFaults">모든 고장 해제</button></div>
+      </form>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let token = sessionStorage.getItem('token') || '';
+let tab = 'dash';
+
+function toast(msg, ms = 3500) {
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', ms);
+}
+
+async function api(method, path, body) {
+  const opt = {method, headers: {}};
+  if (token) opt.headers.Authorization = 'Bearer ' + token;
+  if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = typeof body === 'string' ? body : JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== '/api/login') { showLogin(); throw new Error('login required'); }
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function showLogin() { token = ''; sessionStorage.removeItem('token'); $('#login').classList.remove('hidden'); }
+
+$('#loginForm').onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    const j = await api('POST', '/api/login', {user: f.user.value, password: f.password.value});
+    token = j.token; sessionStorage.setItem('token', token);
+    $('#login').classList.add('hidden'); f.password.value = '';
+    refresh(); loadTab();
+  } catch (err) { toast(err.message); }
+};
+$('#logout').onclick = async () => { try { await api('POST', '/api/logout'); } catch (e) {} showLogin(); };
+
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  tab = b.dataset.t;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('hidden', s.dataset.p !== tab));
+  loadTab();
+});
+
+// ---------- form helpers
+function fill(form, obj) {
+  for (const el of form.elements) {
+    if (!el.name || !(el.name in obj)) continue;
+    if (el.type === 'checkbox') el.checked = !!obj[el.name]; else el.value = obj[el.name];
+  }
+}
+function read(form) {
+  const o = {};
+  for (const el of form.elements) {
+    if (!el.name || el.type === 'file') continue;
+    if (el.type === 'checkbox') o[el.name] = el.checked;
+    else if (el.type === 'number' || el.tagName === 'SELECT' && /^-?\d+$/.test(el.value)) { if (el.value !== '') o[el.name] = Number(el.value); }
+    else o[el.name] = el.value.trim();
+  }
+  return o;
+}
+function kv(el, pairs) {
+  el.innerHTML = pairs.map(([l, v]) => `<div class="kpi"><div class="l">${l}</div><div class="v" style="font-size:16px">${esc(v)}</div></div>`).join('');
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function submit(form, fn) { form.onsubmit = async e => { e.preventDefault(); try { await fn(read(form)); } catch (err) { toast('오류: ' + err.message, 5000); } }; }
+
+// ---------- dashboard (polled)
+const stateKo = {idle: '대기', charging: '충전', discharging: '방전', fault: '고장'};
+async function refresh() {
+  if (!token) return;
+  try {
+    const s = await api('GET', '/api/status');
+    $('#clock').textContent = s.time.valid ? s.time.local + (s.time.ntp_synced ? ' (NTP)' : '') : '시각 미설정';
+    const p = s.pack;
+    $('#kpis').innerHTML = [
+      ['상태', `<span class="tag ${p.state === 'fault' ? 'critical' : 'okc'}">${stateKo[p.state]}</span>`],
+      ['팩 전압', (p.voltage_mv / 1000).toFixed(2) + ' V'],
+      ['전류', (p.current_ma / 1000).toFixed(1) + ' A'],
+      ['SOC', p.soc + ' %'], ['SOH', p.soh + ' %'],
+      ['활성 알람', s.alarms_active], ['통신', p.comm_ok ? '정상' : '<span class="tag critical">끊김</span>'],
+      ['가동 시간', fmtUp(s.uptime_s)],
+    ].map(([l, v]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+    const th = s.thresholds, lo = th.cell_uv_mv, hi = th.cell_ov_mv;
+    $('#cells').innerHTML = s.cells.map((c, i) => {
+      const cls = c.mv >= hi ? 'hi' : c.mv <= lo ? 'lo' : '';
+      const pct = Math.max(0, Math.min(100, (c.mv - lo) / (hi - lo) * 100));
+      return `<div class="cell ${cls}"><div class="n">셀 ${i + 1}</div><div class="mv">${c.mv} mV</div><div class="bar"><i style="width:${pct}%"></i></div><div class="n">${(c.temp_dc / 10).toFixed(1)} °C</div></div>`;
+    }).join('');
+    if (tab === 'alarms') loadAlarms();
+    if (tab === 'network' || netPending) loadNetwork();
+  } catch (e) {}
+}
+function fmtUp(s) { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return (d ? d + '일 ' : '') + h + '시간 ' + m + '분'; }
+
+// ---------- alarms
+async function loadAlarms() {
+  const a = await api('GET', '/api/alarms');
+  const when = x => x.time || `부팅 후 ${x.uptime_s}초`;
+  $('#activeAlarms').innerHTML = a.active.map(x => `<tr><td><span class="tag ${x.severity}">${x.severity}</span></td><td>${esc(x.text)}</td><td>${esc(when(x))}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">활성 알람 없음</td></tr>';
+  $('#alarmHistory').innerHTML = a.history.map(x => `<tr><td>${x.active ? '발생' : '해제'}</td><td><span class="tag ${x.severity}">${x.severity}</span></td><td>${esc(x.text)}</td><td>${esc(when(x))}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">이력 없음</td></tr>';
+}
+
+// ---------- network
+let netPending = false, netLoaded = false;
+async function loadNetwork(force) {
+  const n = await api('GET', '/api/config/network');
+  const s = n.status;
+  kv($('#netStatus'), [['링크', s.link_up ? 'UP' : 'DOWN'], ['방식', s.dhcp ? 'DHCP' : '고정 IP'], ['IP', s.ip], ['마스크', s.mask], ['게이트웨이', s.gateway], ['DNS', s.dns]]);
+  if (force || !netLoaded) { fill($('#netForm'), n.config); toggleStatic(); netLoaded = true; }
+  netPending = n.pending_confirm;
+  const b = $('#netBanner');
+  if (netPending) {
+    b.innerHTML = `네트워크 설정이 변경되었습니다. <b>${n.rollback_in_s}초</b> 안에 확인하지 않으면 이전 설정으로 복구됩니다. <button class="b p" id="netConfirm">확인 (유지)</button>`;
+    b.classList.remove('hidden');
+    $('#netConfirm').onclick = async () => { await api('POST', '/api/config/network/confirm'); toast('네트워크 설정을 확정했습니다'); loadNetwork(true); };
+  } else b.classList.add('hidden');
+}
+function toggleStatic() { const d = $('#netForm').dhcp.checked; document.querySelectorAll('#netForm .st').forEach(i => i.disabled = d); }
+$('#netForm').dhcp.onchange = toggleStatic;
+submit($('#netForm'), async o => {
+  if (!confirm('네트워크 설정을 적용할까요? 주소가 바뀌면 새 주소로 다시 접속해야 합니다.')) return;
+  const j = await api('PUT', '/api/config/network', o);
+  toast(j.message, 6000); loadNetwork(true);
+});
+
+// ---------- ntp / time
+const tz = $('#tzSel');
+for (let m = -720; m <= 840; m += 30) { const h = Math.trunc(m / 60), mm = Math.abs(m % 60); tz.add(new Option(`UTC${m >= 0 ? '+' : '-'}${String(Math.abs(h)).padStart(2, '0')}:${String(mm).padStart(2, '0')}${m === 540 ? ' (KST)' : ''}`, m)); }
+async function loadNtp() {
+  const [n, t] = await Promise.all([api('GET', '/api/config/ntp'), api('GET', '/api/system/time')]);
+  fill($('#ntpForm'), n.config);
+  const s = n.status;
+  kv($('#timeStatus'), [['현재 시각', t.valid ? t.local : '미설정'], ['NTP 동기화', s.synced ? '완료' : (s.in_progress ? '진행 중' : '안 됨')],
+    ['마지막 서버', s.last_server || '-'], ['마지막 동기화', s.synced ? s.last_sync_ago_s + '초 전' : '-'], ['보정량', s.synced ? s.last_adjust_ms + ' ms' : '-'], ['오류', s.last_error || '-']]);
+}
+submit($('#ntpForm'), async o => { await api('PUT', '/api/config/ntp', o); toast('NTP 설정 저장'); setTimeout(loadNtp, 1500); });
+$('#syncNow').onclick = async () => { try { await api('POST', '/api/system/time-sync'); toast('동기화 요청'); setTimeout(loadNtp, 2000); } catch (e) { toast(e.message); } };
+$('#setPcTime').onclick = async () => { try { const j = await api('PUT', '/api/system/time', {epoch_ms: Date.now()}); toast(j.message); loadNtp(); } catch (e) { toast(e.message); } };
+
+// ---------- snmp
+async function loadSnmp() {
+  const s = await api('GET', '/api/config/snmp');
+  const c = Object.assign({}, s.config, {trap_targets: s.config.trap_targets.map(t => t.host + ':' + t.port).join('\n')});
+  fill($('#snmpForm'), c);
+  kv($('#snmpStats'), [['수신', s.stats.in_pkts], ['응답', s.stats.out_pkts], ['잘못된 커뮤니티', s.stats.bad_community], ['파싱 오류', s.stats.parse_errors], ['Trap 전송', s.stats.traps_sent]]);
+}
+submit($('#snmpForm'), async o => {
+  o.trap_targets = o.trap_targets.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [host, port] = l.split(':'); return {host, port: Number(port || 162)}; });
+  await api('PUT', '/api/config/snmp', o); toast('SNMP 설정 저장'); loadSnmp();
+});
+
+// ---------- thresholds / bms
+async function loadThresholds() {
+  const [a, b] = await Promise.all([api('GET', '/api/config/alarm'), api('GET', '/api/config/bms')]);
+  fill($('#alarmForm'), a.config); fill($('#bmsForm'), b.config);
+}
+submit($('#alarmForm'), async o => { await api('PUT', '/api/config/alarm', o); toast('임계값 저장'); });
+submit($('#bmsForm'), async o => { await api('PUT', '/api/config/bms', o); toast('BMS 설정 저장'); });
+
+// ---------- system
+async function loadSystem() {
+  const i = await api('GET', '/api/system/info');
+  kv($('#sysInfo'), [['모델', i.model], ['펌웨어', i.firmware], ['호스트 이름', i.hostname], ['가동 시간', fmtUp(i.uptime_s)]]);
+  $('#host').textContent = i.hostname;
+}
+submit($('#pwForm'), async o => { const j = await api('PUT', '/api/config/password', o); toast(j.message); showLogin(); });
+$('#backup').onclick = async () => {
+  const r = await fetch('/api/config/backup', {headers: {Authorization: 'Bearer ' + token}});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bms-config.json'; a.click();
+};
+$('#restore').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (!confirm('이 파일로 설정을 복원하고 재시작할까요?')) return;
+  try { const j = await api('POST', '/api/config/restore', await f.text()); toast(j.message); setTimeout(showLogin, 2000); } catch (err) { toast('오류: ' + err.message); }
+  e.target.value = '';
+};
+$('#reboot').onclick = async () => { if (confirm('재시작할까요?')) { await api('POST', '/api/system/reboot'); toast('재시작 중...'); setTimeout(showLogin, 1500); } };
+$('#factory').onclick = async () => { if (confirm('모든 설정이 초기화됩니다. 계속할까요?')) { await api('POST', '/api/system/factory-reset'); toast('공장 초기화 후 재시작'); setTimeout(showLogin, 1500); } };
+
+// ---------- simulator
+async function loadSim() {
+  const s = await api('GET', '/api/sim');
+  $('#simForm').soc.placeholder = '현재 ' + s.soc + ' %'; delete s.soc;
+  fill($('#simForm'), s);
+}
+submit($('#simForm'), async o => { await api('PUT', '/api/sim', o); $('#simForm').soc.value = ''; toast('시뮬레이터 적용'); loadSim(); });
+submit($('#faultForm'), async o => { await api('PUT', '/api/sim', o); toast(`셀 ${o.cell} 고장 주입`); });
+$('#resetFaults').onclick = async () => { await api('PUT', '/api/sim', {reset_faults: true}); toast('고장 해제'); loadSim(); };
+
+function loadTab() {
+  if (!token) return;
+  const f = {alarms: loadAlarms, network: () => loadNetwork(true), ntp: loadNtp, snmp: loadSnmp, thresholds: loadThresholds, system: loadSystem, sim: loadSim}[tab];
+  if (f) f().catch(e => toast(e.message));
+}
+
+if (token) { $('#login').classList.add('hidden'); refresh(); loadSystem().catch(() => {}); }
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
